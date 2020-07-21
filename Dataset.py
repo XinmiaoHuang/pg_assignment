@@ -80,10 +80,9 @@ class DeepfashionPoseDataset(Dataset):
 
         image = cv2.resize(image, self.img_shape[:2])
 
-        s_dir = os.path.join(self.map_dir, current_set[idx][:-4] + '.png')
-        s_map = cv2.cvtColor(cv2.imread(s_dir), cv2.COLOR_BGR2RGB)
-        s_map = cv2.resize(s_map, self.img_shape[:2])
-
+        # s_dir = os.path.join(self.map_dir, current_set[idx][:-4] + '.png')
+        # s_map = cv2.cvtColor(cv2.imread(s_dir), cv2.COLOR_BGR2RGB)
+        # s_map = cv2.resize(s_map, self.img_shape[:2])
 
         # pose_img = self.make_joint_img(self.img_shape, self.joint_order, self.index["joints"][idx])
         pose = self.make_joint_map(current_joint[idx], k_size=9)
@@ -101,10 +100,10 @@ class DeepfashionPoseDataset(Dataset):
         n_img = n_img * 1. / 255
 
         image = image * 1. / 255
-        s_map = s_map * 1. / 255
+        #s_map = s_map * 1. / 255
 
         image = image.transpose((2, 0, 1))
-        s_map = s_map.transpose((2, 0, 1))
+        #s_map = s_map.transpose((2, 0, 1))
         n_img = n_img.transpose((2, 0, 1))
 
         input_dir = current_set[idx]
@@ -119,17 +118,16 @@ class DeepfashionPoseDataset(Dataset):
         target = cv2.cvtColor(cv2.imread(target_dir), cv2.COLOR_BGR2RGB)
         target = cv2.resize(target, self.img_shape[:2])
 
-        t_dir = os.path.join(self.map_dir, current_set[t_idx][:-4] + '.png')
-        t_map = cv2.cvtColor(cv2.imread(t_dir), cv2.COLOR_BGR2RGB)
-        t_map = cv2.resize(t_map, self.img_shape[:2])
-
+        # t_dir = os.path.join(self.map_dir, current_set[t_idx][:-4] + '.png')
+        # t_map = cv2.cvtColor(cv2.imread(t_dir), cv2.COLOR_BGR2RGB)
+        # t_map = cv2.resize(t_map, self.img_shape[:2])
 
         t_pose_img = self.make_joint_img(self.img_shape, self.joint_order, current_joint[t_idx])
-        t_n_img, t_n_joint = self.normalize(target, current_joint[t_idx], t_pose_img, self.joint_order, 2)
+        t_n_img, t_n_joint = self.normalize(target, current_joint[t_idx], t_pose_img, self.joint_order, 1)
         h, w = t_n_img.shape[0], t_n_img.shape[1]
         t_n_img = np.concatenate((t_n_img, cv2.resize(target, (h, w))), axis=-1)
 
-        t_map = t_map * 1. / 255
+        #t_map = t_map * 1. / 255
         target = target * 1. / 255
         t_n_img = t_n_img * 1. / 255
 
@@ -145,7 +143,7 @@ class DeepfashionPoseDataset(Dataset):
         # plt.show()
         # plt.close()
 
-        t_map = t_map.transpose((2, 0, 1))
+        #t_map = t_map.transpose((2, 0, 1))
         target = target.transpose((2, 0, 1))
         t_n_img = t_n_img.transpose((2, 0, 1))
 
@@ -155,8 +153,8 @@ class DeepfashionPoseDataset(Dataset):
         # t_mask = np.transpose(np.expand_dims(t_mask, axis=-1)+0, (2, 0, 1)).astype(np.float)
         t_pose = np.concatenate((t_pose, t_color), axis=0)
 
-        sample = {'image': image, 'pose': pose, 'target': target, 't_pose': t_pose, 's_map': s_map,
-                  't_map': t_map, 'color': color, 't_color': t_color, 'n_img': n_img, 'tn_img': t_n_img}
+        sample = {'image': image, 'pose': pose, 'target': target, 't_pose': t_pose,
+                 'color': color, 't_color': t_color, 'n_img': n_img, 'tn_img': t_n_img}
         for key in sample.keys():
             sample[key] = torch.from_numpy(sample[key])
             if self.transform:
@@ -326,10 +324,9 @@ class DeepfashionPoseDataset(Dataset):
         part_imgs = list()
         part_stickmen = list()
         for bpart in bparts:
-            part_img = np.zeros((h, w, 3))
+            part_img = np.random.randint(low=0, high=256, size=(h, w, 3)).astype(np.uint8)
             part_stickman = np.zeros((h, w, 3))
             M = self.get_crop(bpart, joints, jo, wh, o_w, o_h, ar)
-
             if M is not None:
                 part_img = cv2.warpPerspective(img, M, (h, w), borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
                 part_stickman = cv2.warpPerspective(stickman, M, (h, w), borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
@@ -437,13 +434,13 @@ if __name__ == '__main__':
         # # if index > 1200:
         # #     break
 
-        plt.subplot(1, 4, 1)
-        plt.imshow(np.transpose(imgs[0], (1, 2, 0)))
-        plt.subplot(1, 4, 2)
-        plt.imshow(np.sum(np.transpose(poses[0], (1, 2, 0)), axis=2))
-        plt.subplot(1, 4, 3)
-        plt.imshow(np.transpose(target[0], (1, 2, 0)))
-        plt.subplot(1, 4, 4)
-        plt.imshow(np.sum(np.transpose(tposes[0], (1, 2, 0)), axis=2))
-        plt.show()
+        # plt.subplot(1, 4, 1)
+        # plt.imshow(np.transpose(imgs[0], (1, 2, 0)))
+        # plt.subplot(1, 4, 2)
+        # plt.imshow(np.sum(np.transpose(poses[0], (1, 2, 0)), axis=2))
+        # plt.subplot(1, 4, 3)
+        # plt.imshow(np.transpose(target[0], (1, 2, 0)))
+        # plt.subplot(1, 4, 4)
+        # plt.imshow(np.sum(np.transpose(tposes[0], (1, 2, 0)), axis=2))
+        # plt.show()
     print("process ended.")

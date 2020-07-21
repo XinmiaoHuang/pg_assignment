@@ -21,12 +21,12 @@ class criterionPerPixel(nn.Module):
 
 
     def forward(self, pred, target):
-        # loss_l1 = self.l1_loss(pred, target)
+        loss_l1 = self.l1_loss(pred, target)
         # style_loss = self.style_loss(pred, target)
         perceptual_loss = self.perceptual_loss(pred, target)
         # loss_tv += self.l1_loss(pred[:, :, 1: , :], pred[:, : ,:-1, :])
         # loss_tv += self.l1_loss(pred[:, :, : , 1:], pred[:, : ,:, :-1])
-        return perceptual_loss, perceptual_loss, perceptual_loss
+        return loss_l1, perceptual_loss, perceptual_loss
 
 
 class criterion_GAN(nn.Module):

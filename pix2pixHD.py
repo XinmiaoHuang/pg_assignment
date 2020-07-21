@@ -1,7 +1,8 @@
 import torch
 import functools
 import torch.nn as nn
-from utils import ResBlock
+from utils import ResBlock, StyleBlock, Dense
+from utils import calc_mean_std
 
 
 class Discriminator(nn.Module):
@@ -146,5 +147,70 @@ class pix2pix(nn.Module):
         # x = torch.cat((img, pose), dim=1)
         x = self.encoder(pose)
         x = self.resnet(x)
+        out = self.decoder(x)
+        return out
+
+
+class pix2pixStyle(nn.Module):
+    def __init__(self, input_nc, n_layer=3, norm_layer=nn.BatchNorm2d, ngf=64):
+        super(pix2pixStyle, self).__init__()
+        self.input_nc = input_nc
+        self.ngf = ngf
+
+        encoder = [nn.Conv2d(input_nc, ngf, 3, 2, 1, bias=False),
+                   nn.ReLU(True)
+                   ]
+        n_mult = 1
+        for i in range(n_layer):
+            encoder += [nn.Conv2d(ngf * n_mult, ngf * (n_mult * 2), 3, 2, 1, bias=False),
+                        norm_layer(ngf * (n_mult * 2)),
+                        nn.ReLU(True)]
+            n_mult = n_mult * 2
+        self.encoder = nn.Sequential(*encoder)
+
+
+        style_encoder = [Dense(27, ngf),
+                         nn.Conv2d(ngf, ngf, 3, 2, 1, bias=False),
+                         norm_layer(ngf * (n_mult * 2)),
+                         nn.ReLU(True)
+                        ]
+        n_mult = 1
+        for i in range(n_layer):
+            style_encoder += [Dense(ngf * n_mult, ngf * (n_mult * 2)),
+                              nn.Conv2d(ngf * (n_mult * 2), ngf * (n_mult * 2), 3, 2, 1, bias=False),
+                              norm_layer(ngf * (n_mult * 2)),
+                              nn.ReLU(True)]
+            n_mult = n_mult * 2
+        self.style_encoder = nn.Sequential(*style_encoder)
+
+        resnet = []
+        n_blocks = 6
+        for i in range(n_blocks):
+            resnet += [StyleBlock(n_mult * ngf)]
+        self.resnet = nn.ModuleList(resnet)
+
+        decoder = [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                   nn.Conv2d(ngf * 8, ngf * 8, 3, 1, 1, bias=False),
+                   norm_layer(ngf * 8),
+                   nn.ReLU(True)]
+        n_mult = 8
+        for i in range(n_layer):
+            decoder += [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
+                        nn.Conv2d(ngf * n_mult, ngf * (n_mult // 2), 3, 1, 1, bias=False),
+                        norm_layer(ngf * (n_mult * 2)),
+                        nn.ReLU(True)]
+            n_mult = n_mult // 2
+
+        decoder += [nn.Conv2d(ngf, 3, 3, 1, 1, bias=False),
+                    nn.Tanh()]
+        self.decoder = nn.Sequential(*decoder)
+
+    def forward(self, img, pose, style):
+        # x = torch.cat((img, pose), dim=1)
+        style = self.style_encoder(style)
+        style_mean, style_std = calc_mean_std(style)
+        x = self.encoder(pose)
+        for i in range(len(self.resnet)):
+            x = self.resnet[i](x, style_mean, style_std)
         out = self.decoder(x)
         return out

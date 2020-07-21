@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torchvision.utils as vutils
 from utils import normalize, denormalize, set_requires_grad
-from pix2pixHD import pix2pix, MultiScaleDiscriminator
+from pix2pixHD import pix2pixStyle, MultiScaleDiscriminator
 from loss import criterion_GAN, criterionPerPixel
 
 
@@ -26,12 +26,13 @@ class pix2pixHDModel:
         self.test_per_epoch = opt.test_per_epoch
         self.save_per_epoch = opt.save_per_epoch
         self.use_lsgan = opt.use_lsgan
+        self.use_sigmoid = opt.use_sigmoid
 
         self.trainloader = trainloader
         self.testloader = testloader
 
-        self.pix2pix = pix2pix(self.inputc, norm_layer=nn.InstanceNorm2d)
-        self.dnet = MultiScaleDiscriminator(self.d_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=True)
+        self.pix2pix = pix2pixStyle(self.inputc, norm_layer=nn.InstanceNorm2d)
+        self.dnet = MultiScaleDiscriminator(self.d_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=self.use_sigmoid)
 
         self.criterionGAN = criterion_GAN(use_lsgan=self.use_lsgan) 
         self.criterionPerPixel = criterionPerPixel()
@@ -92,8 +93,8 @@ class pix2pixHDModel:
         self.pix2pix.to(device=self.device)
         self.dnet.to(device=self.device)
 
-        self.optimizer_G = torch.optim.Adam(self.pix2pix.parameters(), lr=self.lr)
-        self.optimizer_D = torch.optim.Adam(self.dnet.parameters(), lr=self.lr)
+        self.optimizer_G = torch.optim.Adam(self.pix2pix.parameters(), lr=self.lr, betas=(0.5, 0.999))
+        self.optimizer_D = torch.optim.Adam(self.dnet.parameters(), lr=self.lr, betas=(0.5, 0.999))
 
         for epoch in range(self.epochs):
             err_g_list = []
@@ -112,14 +113,16 @@ class pix2pixHDModel:
                 img = data_batch['input']['image']
                 t_pose = data_batch['input']['t_pose']
                 target = data_batch['input']['target']
-                smap = data_batch['input']['s_map']
-                t_map = data_batch['input']['t_map']
+                style = data_batch['input']['n_img']
+                # smap = data_batch['input']['s_map']
+                # t_map = data_batch['input']['t_map']
 
                 self.img = img.type(torch.FloatTensor).to(self.device)
                 self.t_pose = t_pose.type(torch.FloatTensor).to(self.device)
                 self.target = target.type(torch.FloatTensor).to(self.device)
-                self.smap = smap.type(torch.FloatTensor).to(self.device)
-                self.t_map = t_map.type(torch.FloatTensor).to(self.device)
+                self.style = style.type(torch.FloatTensor).to(self.device)
+                # self.smap = smap.type(torch.FloatTensor).to(self.device)
+                # self.t_map = t_map.type(torch.FloatTensor).to(self.device)
 
                 err_g, err_d, loss_l1, loss_p, loss_style, l_gan, l_fm = self.one_step()
 
@@ -151,7 +154,7 @@ class pix2pixHDModel:
                     self.save_model()
 
     def one_step(self):
-        self.fake = self.pix2pix(self.img, self.t_pose)
+        self.fake = self.pix2pix(self.img, self.t_pose, self.style)
 
         real_inter_d, real_score_d = self.dnet(torch.cat((self.target, self.target), dim=1))
         real_loss_d = self.criterionGAN(real_score_d, True)
@@ -169,7 +172,7 @@ class pix2pixHDModel:
                 l_fm += self.criterionFM(real_inter_d[i][j].detach(), fake_inter_g[i][j])
 
         loss_l1, loss_p, loss_style = self.criterionPerPixel(self.fake, self.target)
-        err_g = 0 * loss_l1 + 3 * loss_p + 0 * loss_style + 1 * l_gan + 0.3 * l_fm
+        err_g = 2 * loss_l1 + 2 * loss_p + 0 * loss_style + 1 * l_gan + 1 * l_fm
 
         # optimize genrator
         self.pix2pix.zero_grad()
@@ -192,10 +195,12 @@ class pix2pixHDModel:
         test_img = test_img.type(torch.FloatTensor).to(self.device)
         test_pose = test_batch['input']['t_pose']
         test_pose = test_pose.type(torch.FloatTensor).to(self.device)
-        test_map = test_batch['input']['s_map']
-        test_map = test_map.type(torch.FloatTensor).to(self.device)
-        test_t_map = test_batch['input']['t_map']
-        test_t_map = test_t_map.type(torch.FloatTensor).to(self.device)
+        test_style = test_batch['input']['n_img']
+        test_style = test_style.type(torch.FloatTensor).to(self.device)
+        # test_map = test_batch['input']['s_map']
+        # test_map = test_map.type(torch.FloatTensor).to(self.device)
+        # test_t_map = test_batch['input']['t_map']
+        # test_t_map = test_t_map.type(torch.FloatTensor).to(self.device)
 
         with torch.no_grad():
             source = (test_batch['input']['image']).detach().cpu()
@@ -204,7 +209,7 @@ class pix2pixHDModel:
             poses = torch.unsqueeze(torch.sum(poses, dim=1), dim=1)
             target_ = (test_batch['input']['target']).detach().cpu()
 
-            fake_ = self.pix2pix(test_img, test_pose)
+            fake_ = self.pix2pix(test_img, test_pose, test_style)
             fake_ = fake_.detach().cpu()
         
         fake_ = denormalize(fake_)

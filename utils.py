@@ -122,6 +122,27 @@ class ResBlock(nn.Module):
         out = self.relu(out + residual)
         return out
 
+class StyleBlock(nn.Module):
+    def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
+        super().__init__()
+        self.conv_block1 = nn.Sequential(
+            nn.Conv2d(channels, channels, k_size, stride, padding, dilation),
+        )
+        self.conv_block2 = nn.Sequential(
+            nn.Conv2d(channels, channels, k_size, stride, padding, dilation),
+        )
+        self.l_relu = nn.LeakyReLU(inplace=True)
+
+    def forward(self, x, style_mean, style_std):
+        residual = x
+        x = self.conv_block1(x)
+        x = adaptive_instance_normalization(x, style_mean, style_std)
+        x = self.l_relu(x)
+        x = self.conv_block2(x)
+        x = adaptive_instance_normalization(x, style_mean, style_std)
+        out = self.l_relu(x + residual)
+        return out
+
 class _DenseLayer(nn.Sequential):
     def __init__(self, num_input_features, growth_rate, drop_rate):
         super(_DenseLayer, self).__init__()
@@ -210,3 +231,28 @@ def make_shape_parts(img, test_output=False,
     # 将最后一个设置为人身
     # shape_parts[-1][img!=labels[0]] = 1.0
     return shape_parts
+
+
+"""
+reference:
+    https://github.com/naoto0804/pytorch-AdaIN/
+"""
+def calc_mean_std(feat, eps=1e-5):
+    # eps is a small value added to the variance to avoid divide-by-zero.
+    size = feat.size()
+    assert (len(size) == 4)
+    N, C = size[:2]
+    feat_var = feat.view(N, C, -1).var(dim=2) + eps
+    feat_std = feat_var.sqrt().view(N, C, 1, 1)
+    feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
+    return feat_mean, feat_std
+
+def adaptive_instance_normalization(content_feat, style_mean, style_std):
+    # assert (content_feat.size()[:2] == style_feat.size()[:2])
+    size = content_feat.size()
+    content_mean, content_std = calc_mean_std(content_feat)
+
+    normalized_feat = (content_feat - content_mean.expand(
+        size)) / content_std.expand(size)
+    return normalized_feat * style_std.expand(size) + style_mean.expand(size)
+
