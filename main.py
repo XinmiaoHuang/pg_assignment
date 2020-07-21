@@ -31,7 +31,7 @@ def test(opt):
                                 shuffle=True, drop_last=True)
     # initialize
     model = pix2pixHDModel(opt, None, deepfashionTestLoader)
-    model.init()
+    model.init('xavier')
     
     if opt.checkpoint is not None:
         model.load_model(opt.checkpoint)

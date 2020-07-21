@@ -104,6 +104,55 @@ class MultiScaleDiscriminator(nn.Module):
                 input = self.downsample(input)
         return interFeat, res
 
+class Discriminator_t(nn.Module):
+    def __init__(self, input_nc, ndf=64, n_blocks=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False):
+        super(Discriminator_t, self).__init__()
+        sequence = []
+        sequence += nn.Sequential(*[nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False),
+                                    nn.LeakyReLU(0.2, inplace=True)])
+        n_mult = 1
+        for i in range(n_blocks):
+            sequence += nn.Sequential(*[nn.Conv2d(ndf * n_mult, ndf * n_mult * 2, 4, 2, 1, bias=False),
+                         norm_layer(ndf * n_mult * 2),
+                         nn.LeakyReLU(0.2, inplace=True)])
+            n_mult *= 2
+            # sequence += [ResBlock(ndf * n_mult)]
+        sequence += [nn.Conv2d(ndf * n_mult, 1, 4, 1, 1, bias=False)]
+        if use_sigmoid:
+            sequence += [nn.Sigmoid()]
+        self.model = nn.ModuleList(sequence)
+
+    def forward(self, input):
+        x = input
+        for i in range(len(self.model)):
+            x = self.model[i](x)
+        return x
+
+class Discriminator_p(nn.Module):
+    def __init__(self, input_nc, ndf=64, n_blocks=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False):
+        super(Discriminator_p, self).__init__()
+        sequence = []
+        sequence += nn.Sequential(*[nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False),
+                                    nn.LeakyReLU(0.2, inplace=True)])
+        n_mult = 1
+        for i in range(n_blocks):
+            sequence += nn.Sequential(*[nn.Conv2d(ndf * n_mult, ndf * n_mult * 2, 4, 2, 1, bias=False),
+                         norm_layer(ndf * n_mult * 2),
+                         nn.LeakyReLU(0.2, inplace=True)])
+            n_mult *= 2
+            # sequence += [ResBlock(ndf * n_mult)]
+        sequence += [nn.Conv2d(ndf * n_mult, 1, 4, 1, 1, bias=False)]
+        if use_sigmoid:
+            sequence += [nn.Sigmoid()]
+        self.model = nn.ModuleList(sequence)
+
+    def forward(self, input):
+        x = input
+        for i in range(len(self.model)):
+            x = self.model[i](x)
+        return x
+
+
 class pix2pix(nn.Module):
     def __init__(self, input_nc, n_layer=3, norm_layer=nn.BatchNorm2d, ngf=64):
         super(pix2pix, self).__init__()
