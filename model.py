@@ -32,9 +32,9 @@ class pix2pixHDModel:
         self.trainloader = trainloader
         self.testloader = testloader
 
-        self.pix2pix = pix2pixStyle(self.inputc, norm_layer=nn.InstanceNorm2d)
-        self.dnet_t = Discriminator_t(self.dt_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=self.use_sigmoid)
-        self.dnet_p = Discriminator_p(self.dp_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=self.use_sigmoid)
+        self.pix2pix = pix2pixStyle(self.inputc, norm_layer=nn.BatchNorm2d)
+        self.dnet_t = Discriminator_t(self.dt_inputc, norm_layer=nn.BatchNorm2d, use_sigmoid=self.use_sigmoid)
+        self.dnet_p = Discriminator_p(self.dp_inputc, norm_layer=nn.BatchNorm2d, use_sigmoid=self.use_sigmoid)
 
         self.criterionGAN = criterion_GAN(use_lsgan=self.use_lsgan) 
         self.criterionPerPixel = criterionPerPixel()
