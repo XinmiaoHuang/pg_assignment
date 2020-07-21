@@ -324,7 +324,7 @@ class DeepfashionPoseDataset(Dataset):
         part_imgs = list()
         part_stickmen = list()
         for bpart in bparts:
-            part_img = np.random.randint(low=0, high=256, size=(h, w, 3)).astype(np.uint8)
+            part_img = np,zeros((h, w, 3))   #np.random.randint(low=0, high=256, size=(h, w, 3)).astype(np.uint8)
             part_stickman = np.zeros((h, w, 3))
             M = self.get_crop(bpart, joints, jo, wh, o_w, o_h, ar)
             if M is not None:

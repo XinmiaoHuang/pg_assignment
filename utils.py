@@ -122,6 +122,45 @@ class ResBlock(nn.Module):
         out = self.relu(out + residual)
         return out
 
+class SPADE(nn.Module):
+    def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(channels, channels, k_size, stride, padding, dilation),
+            nn.ReLU(inplace=True)
+        )
+        self.conv_mean = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.conv_std = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.bn = nn.BatchNorm2d(channels)
+
+    def forward(self, x, style):
+        style = self.conv(style)
+        sty_mean = self.conv_mean(style)
+        sty_std = self.conv_std(style)
+        x = self.bn(x)
+        return x * sty_std + sty_mean
+
+class SPADE_Resblock(nn.Module):
+    def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.conv2 = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.conv3 = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.relu = nn.ReLU(inplace=True)
+        self.spade1 = SPADE(channels)
+        self.spade2 = SPADE(channels)
+        self.spade3 = SPADE(channels)
+
+    def forward(self, x, style):
+        residual = self.conv3(x)
+        residual = self.relu(self.spade3(residual, style))
+        x = self.conv1(x)
+        x = self.relu(self.spade1(x, style))
+        x = self.conv2(x)
+        x = self.spade2(x, style)
+        out = self.relu(x + residual)
+        return out
+
 class StyleBlock(nn.Module):
     def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
         super().__init__()
