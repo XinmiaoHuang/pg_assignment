@@ -126,26 +126,26 @@ class SPADE(nn.Module):
     def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(channels, channels, k_size, stride, padding, dilation),
+            spectral_norm(nn.Conv2d(channels, channels, k_size, stride, padding, dilation)),
             nn.ReLU(inplace=True)
         )
-        self.conv_mean = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
-        self.conv_std = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.conv_mean = spectral_norm(nn.Conv2d(channels, channels, k_size, stride, padding, dilation))
+        self.conv_std = spectral_norm(nn.Conv2d(channels, channels, k_size, stride, padding, dilation))
         self.bn = nn.BatchNorm2d(channels)
 
     def forward(self, x, style):
-        style = self.conv(style)
-        sty_mean = self.conv_mean(style)
-        sty_std = self.conv_std(style)
+        sty = self.conv(style)
+        sty_mean = self.conv_mean(sty)
+        sty_std = self.conv_std(sty)
         x = self.bn(x)
         return x * sty_std + sty_mean
 
 class SPADE_Resblock(nn.Module):
     def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
-        self.conv2 = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
-        self.conv3 = nn.Conv2d(channels, channels, k_size, stride, padding, dilation)
+        self.conv1 = spectral_norm(nn.Conv2d(channels, channels, k_size, stride, padding, dilation))
+        self.conv2 = spectral_norm(nn.Conv2d(channels, channels, k_size, stride, padding, dilation))
+        self.conv3 = spectral_norm(nn.Conv2d(channels, channels, k_size, stride, padding, dilation))
         self.relu = nn.ReLU(inplace=True)
         self.spade1 = SPADE(channels)
         self.spade2 = SPADE(channels)
@@ -172,13 +172,16 @@ class StyleBlock(nn.Module):
         )
         self.l_relu = nn.LeakyReLU(inplace=True)
 
-    def forward(self, x, style_mean, style_std):
+        self.adain_1 = AdaIN(channels)
+        self.adain_2 = AdaIN(channels)
+
+    def forward(self, x, style):
         residual = x
         x = self.conv_block1(x)
-        x = adaptive_instance_normalization(x, style_mean, style_std)
+        x = self.adain_1(x, style)
         x = self.l_relu(x)
         x = self.conv_block2(x)
-        x = adaptive_instance_normalization(x, style_mean, style_std)
+        x = self.adain_2(x, style)
         out = self.l_relu(x + residual)
         return out
 
@@ -271,11 +274,28 @@ def make_shape_parts(img, test_output=False,
     # shape_parts[-1][img!=labels[0]] = 1.0
     return shape_parts
 
+class AdaIN(nn.Module):
+    def __init__(self, channels, k_size=3, stride=1, padding=1, dilation=1):
+        super().__init__()
+        self.conv_mean =  nn.Sequential(
+            nn.Conv2d(channels, channels, k_size, stride, padding, dilation),
+            nn.ReLU(inplace=True),
+            Dense(channels, channels),
+            nn.AdaptiveAvgPool2d(output_size=(1, 1))
+            )
+        self.conv_std =  nn.Sequential(
+            nn.Conv2d(channels, channels, k_size, stride, padding, dilation),
+            nn.ReLU(inplace=True),
+            Dense(channels, channels),
+            nn.AdaptiveAvgPool2d(output_size=(1, 1))
+            )
+        # self.bn = nn.BatchNorm2d(channels)
 
-"""
-reference:
-    https://github.com/naoto0804/pytorch-AdaIN/
-"""
+    def forward(self, x, style):
+        sty_mean = self.conv_mean(style)
+        sty_std = self.conv_std(style)
+        return x * sty_std + sty_mean
+
 def calc_mean_std(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
     size = feat.size()
@@ -286,12 +306,8 @@ def calc_mean_std(feat, eps=1e-5):
     feat_mean = feat.view(N, C, -1).mean(dim=2).view(N, C, 1, 1)
     return feat_mean, feat_std
 
-def adaptive_instance_normalization(content_feat, style_mean, style_std):
-    # assert (content_feat.size()[:2] == style_feat.size()[:2])
-    size = content_feat.size()
-    content_mean, content_std = calc_mean_std(content_feat)
+def spectral_norm(module, mode=True):
+    if mode:
+        return nn.utils.spectral_norm(module)
 
-    normalized_feat = (content_feat - content_mean.expand(
-        size)) / content_std.expand(size)
-    return normalized_feat * style_std.expand(size) + style_mean.expand(size)
-
+    return module

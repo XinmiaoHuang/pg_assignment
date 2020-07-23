@@ -2,7 +2,7 @@ import torch
 import functools
 import torch.nn as nn
 from utils import ResBlock, StyleBlock, Dense, SPADE_Resblock
-from utils import calc_mean_std
+from utils import spectral_norm
 
 
 class Discriminator(nn.Module):
@@ -108,11 +108,12 @@ class Discriminator_t(nn.Module):
     def __init__(self, input_nc, ndf=64, n_blocks=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False):
         super(Discriminator_t, self).__init__()
         sequence = []
-        sequence += nn.Sequential(*[nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False),
+        sequence += nn.Sequential(*[spectral_norm(nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)),
                                     nn.LeakyReLU(0.2, inplace=True)])
         n_mult = 1
-        for i in range(n_blocks):
-            sequence += nn.Sequential(*[nn.Conv2d(ndf * n_mult, ndf * n_mult * 2, 4, 2, 1, bias=False),
+        for _ in range(n_blocks):
+            sequence += nn.Sequential(*[
+                         spectral_norm(nn.Conv2d(ndf * n_mult, ndf * n_mult * 2, 4, 2, 1, bias=False)),
                          norm_layer(ndf * n_mult * 2),
                          nn.LeakyReLU(0.2, inplace=True)])
             n_mult *= 2
@@ -132,11 +133,12 @@ class Discriminator_p(nn.Module):
     def __init__(self, input_nc, ndf=64, n_blocks=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False):
         super(Discriminator_p, self).__init__()
         sequence = []
-        sequence += nn.Sequential(*[nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False),
+        sequence += nn.Sequential(*[spectral_norm(nn.Conv2d(input_nc, ndf, 4, 2, 1, bias=False)),
                                     nn.LeakyReLU(0.2, inplace=True)])
         n_mult = 1
-        for i in range(n_blocks):
-            sequence += nn.Sequential(*[nn.Conv2d(ndf * n_mult, ndf * n_mult * 2, 4, 2, 1, bias=False),
+        for _ in range(n_blocks):
+            sequence += nn.Sequential(*[
+                         spectral_norm(nn.Conv2d(ndf * n_mult, ndf * n_mult * 2, 4, 2, 1, bias=False)),
                          norm_layer(ndf * n_mult * 2),
                          nn.LeakyReLU(0.2, inplace=True)])
             n_mult *= 2
@@ -163,7 +165,7 @@ class pix2pix(nn.Module):
                    nn.ReLU(True)
                    ]
         n_mult = 1
-        for i in range(n_layer):
+        for _ in range(n_layer):
             encoder += [nn.Conv2d(ngf * n_mult, ngf * (n_mult * 2), 3, 2, 1, bias=False),
                         norm_layer(ngf * (n_mult * 2)),
                         nn.ReLU(True)]
@@ -206,31 +208,34 @@ class pix2pixStyle(nn.Module):
         self.input_nc = input_nc
         self.ngf = ngf
 
-        encoder = [nn.Conv2d(input_nc, ngf, 3, 2, 1, bias=False),
-                   nn.ReLU(True)
+        encoder = [nn.ReflectionPad2d(3),
+                   spectral_norm(nn.Conv2d(input_nc, ngf, kernel_size=7, stride=1, padding=0)),
+                   nn.ReLU(True),
+                   spectral_norm(nn.Conv2d(ngf, ngf, 3, 2, 1, bias=False)),
+                   norm_layer(ngf),
+                   nn.ReLU(True),
                    ]
         n_mult = 1
         for _ in range(n_layer):
             ngf_in = min(ngf * n_mult, ngf * 4)
             ngf_out = min(ngf * (n_mult * 2), ngf * 4)
-            encoder += [nn.Conv2d(ngf_in, ngf_out, 3, 2, 1, bias=False),
+            encoder += [spectral_norm(nn.Conv2d(ngf_in, ngf_out, 3, 2, 1, bias=False)),
                         norm_layer(ngf_out),
                         nn.ReLU(True)]
             n_mult = n_mult * 2
         self.encoder = nn.Sequential(*encoder)
 
 
-        style_encoder = [Dense(27, ngf),
-                         nn.Conv2d(ngf, ngf, 3, 1, 1, bias=False),
+        style_encoder = [spectral_norm(nn.Conv2d(21, ngf, 3, 1, 1, bias=False)),
                          norm_layer(ngf),
                          nn.ReLU(True)
                         ]
         n_mult = 1
-        for _ in range(n_layer-1):
+        for _ in range(n_layer):
             ngf_in = min(ngf * n_mult, ngf * 4)
             ngf_out = min(ngf * (n_mult * 2), ngf * 4)
-            style_encoder += [Dense(ngf_in, ngf_out),
-                              nn.Conv2d(ngf_out, ngf_out, 3, 2, 1, bias=False),
+            style_encoder += [Dense(ngf_in, ngf_in),
+                              spectral_norm(nn.Conv2d(ngf_in, ngf_out, 3, 2, 1, bias=False)),
                               norm_layer(ngf_out),
                               nn.ReLU(True)]
             n_mult = n_mult * 2
@@ -239,35 +244,36 @@ class pix2pixStyle(nn.Module):
         resnet = []
         n_blocks = 6
         for _ in range(n_blocks):
-            resnet += [SPADE_Resblock(4 * ngf)]
+            resnet += [StyleBlock(4 * ngf)]
         self.resnet = nn.ModuleList(resnet)
 
         decoder = [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                   nn.Conv2d(ngf * 4, ngf * 4, 3, 1, 1, bias=False),
+                   spectral_norm(nn.Conv2d(ngf * 4, ngf * 4, 3, 1, 1, bias=False)),
                    norm_layer(ngf * 4),
                    nn.ReLU(True)]
 
         decoder += [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                    nn.Conv2d(ngf * 4, ngf * 4, 3, 1, 1, bias=False),
+                    spectral_norm(nn.Conv2d(ngf * 4, ngf * 4, 3, 1, 1, bias=False)),
                     norm_layer(ngf * 4),
                     nn.ReLU(True)]
         n_mult = 4
-        for i in range(n_layer-1):
+        for _ in range(n_layer-1):
             decoder += [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
-                        nn.Conv2d(ngf * n_mult, ngf * (n_mult // 2), 3, 1, 1, bias=False),
+                        spectral_norm(nn.Conv2d(ngf * n_mult, ngf * (n_mult // 2), 3, 1, 1, bias=False)),
                         norm_layer(ngf * (n_mult // 2)),
                         nn.ReLU(True)]
             n_mult = n_mult // 2
 
-        decoder += [nn.Conv2d(ngf, 3, 3, 1, 1, bias=False),
+        decoder += [nn.ReflectionPad2d(3),
+                    nn.Conv2d(ngf, 3, kernel_size=7, stride=1, padding=0),
                     nn.Tanh()]
         self.decoder = nn.Sequential(*decoder)
 
     def forward(self, img, pose, style):
-        # x = torch.cat((img, pose), dim=1)
-        style = self.style_encoder(style)
+        sty_in = torch.cat((img, pose), dim=1)
+        sty = self.style_encoder(sty_in)
         x = self.encoder(pose)
         for i in range(len(self.resnet)):
-            x = self.resnet[i](x, style)
+            x = self.resnet[i](x, sty)
         out = self.decoder(x)
         return out

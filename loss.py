@@ -26,14 +26,14 @@ class criterionPerPixel(nn.Module):
         perceptual_loss = self.perceptual_loss(pred, target)
         # loss_tv += self.l1_loss(pred[:, :, 1: , :], pred[:, : ,:-1, :])
         # loss_tv += self.l1_loss(pred[:, :, : , 1:], pred[:, : ,:, :-1])
-        return loss_l1, perceptual_loss, perceptual_loss
+        return loss_l1, perceptual_loss, loss_l1
 
 
 class criterion_GAN(nn.Module):
-    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=0.0, tensor=torch.FloatTensor):
+    def __init__(self, use_lsgan=True, target_real_label=1.0, target_fake_label=-1.0, tensor=torch.FloatTensor):
         super(criterion_GAN, self).__init__()
-        self.real_label = target_real_label - 0.05 * np.random.rand()      # label smoothing
-        self.fake_label = target_fake_label + 0.05 * np.random.rand()
+        self.real_label = target_real_label - 0.1 * np.random.rand()      # label smoothing
+        self.fake_label = target_fake_label + 0.1 * np.random.rand()
         self.real_label_var = None
         self.fake_label_var = None
         self.Tensor = tensor
@@ -58,7 +58,7 @@ class criterion_GAN(nn.Module):
             target_tensor = self.fake_label_var
         return target_tensor
 
-    def __call__(self, input, target_is_real):
+    def __call__(self, input, target_is_real, for_discriminator=True):
         if isinstance(input, list):
             loss = 0
             for pred in input:
@@ -69,7 +69,21 @@ class criterion_GAN(nn.Module):
         else:            
             target_tensor = self.get_target_tensor(input, target_is_real)
             target_tensor = target_tensor.cuda()
-            return self.loss(input, target_tensor)
+            loss = self.loss(input, target_tensor)
+            return loss
+        # target_tensor = self.get_target_tensor(input, False)
+        # target_tensor = target_tensor.cuda()
+        # if for_discriminator:
+        #     if target_is_real:
+        #         minval = torch.min(input - 1, target_tensor)
+        #         loss = -torch.mean(minval)
+        #     else:
+        #         minval = torch.min(-input - 1, target_tensor)
+        #         loss = -torch.mean(minval)
+        # else:
+        #     assert target_is_real, "The generator's hinge loss must be aiming for real"
+        #     loss = -torch.mean(input)
+        # return loss
 
 
 """

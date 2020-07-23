@@ -90,7 +90,7 @@ class DeepfashionPoseDataset(Dataset):
         
         color = np.transpose(color, (2, 0, 1)) * 1./255
         # mask = np.transpose(np.expand_dims(mask, axis=-1)+0, (2, 0, 1)).astype(np.float)
-        pose = np.concatenate((pose, color), axis=0)
+        # pose = np.concatenate((pose, color), axis=0)
 
         pose_img = self.make_joint_img(self.img_shape, self.joint_order, current_joint[idx])
         n_img, n_joint = self.normalize(image, current_joint[idx], pose_img, self.joint_order, 2)
@@ -151,7 +151,7 @@ class DeepfashionPoseDataset(Dataset):
         t_color, t_mask = self.draw_pose_from_cords(np.floor(current_joint[t_idx]).astype(int), self.img_shape[:2])
         t_color = np.transpose(t_color, (2, 0, 1)) * 1./255
         # t_mask = np.transpose(np.expand_dims(t_mask, axis=-1)+0, (2, 0, 1)).astype(np.float)
-        t_pose = np.concatenate((t_pose, t_color), axis=0)
+        # t_pose = np.concatenate((t_pose, t_color), axis=0)
 
         sample = {'image': image, 'pose': pose, 'target': target, 't_pose': t_pose,
                  'color': color, 't_color': t_color, 'n_img': n_img, 'tn_img': t_n_img}
@@ -434,13 +434,13 @@ if __name__ == '__main__':
         # # if index > 1200:
         # #     break
 
-        # plt.subplot(1, 4, 1)
-        # plt.imshow(np.transpose(imgs[0], (1, 2, 0)))
-        # plt.subplot(1, 4, 2)
-        # plt.imshow(np.sum(np.transpose(poses[0], (1, 2, 0)), axis=2))
-        # plt.subplot(1, 4, 3)
-        # plt.imshow(np.transpose(target[0], (1, 2, 0)))
-        # plt.subplot(1, 4, 4)
-        # plt.imshow(np.sum(np.transpose(tposes[0], (1, 2, 0)), axis=2))
-        # plt.show()
+        plt.subplot(1, 4, 1)
+        plt.imshow(np.transpose(imgs[0], (1, 2, 0)))
+        plt.subplot(1, 4, 2)
+        plt.imshow(np.sum(np.transpose(poses[0], (1, 2, 0)), axis=2))
+        plt.subplot(1, 4, 3)
+        plt.imshow(np.transpose(target[0], (1, 2, 0)))
+        plt.subplot(1, 4, 4)
+        plt.imshow(np.sum(np.transpose(tposes[0], (1, 2, 0)), axis=2))
+        plt.show()
     print("process ended.")

@@ -32,9 +32,11 @@ class pix2pixHDModel:
         self.trainloader = trainloader
         self.testloader = testloader
 
-        self.pix2pix = pix2pixStyle(self.inputc, norm_layer=nn.BatchNorm2d)
-        self.dnet_t = Discriminator_t(self.dt_inputc, norm_layer=nn.BatchNorm2d, use_sigmoid=self.use_sigmoid)
-        self.dnet_p = Discriminator_p(self.dp_inputc, norm_layer=nn.BatchNorm2d, use_sigmoid=self.use_sigmoid)
+        self.pix2pix = pix2pixStyle(self.inputc, norm_layer=nn.InstanceNorm2d)
+        self.dnet_t = Discriminator_t(self.dt_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=self.use_sigmoid)
+        self.dnet_p = Discriminator_p(self.dp_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=self.use_sigmoid)
+        self.dnet_k = Discriminator_t(self.dp_inputc, norm_layer=nn.InstanceNorm2d, use_sigmoid=self.use_sigmoid)
+
 
         self.criterionGAN = criterion_GAN(use_lsgan=self.use_lsgan) 
         self.criterionPerPixel = criterionPerPixel()
@@ -78,6 +80,8 @@ class pix2pixHDModel:
         torch.save(self.pix2pix.state_dict(), os.path.join(self.save_dir, 'g_net.pth'))
         torch.save(self.dnet_t.state_dict(), os.path.join(self.save_dir, 'dnet_t.pth'))
         torch.save(self.dnet_p.state_dict(), os.path.join(self.save_dir, 'dnet_p.pth'))
+        torch.save(self.dnet_k.state_dict(), os.path.join(self.save_dir, 'dnet_k.pth'))
+
 
 
     def load_model(self, load_g = True, load_d = True):
@@ -89,6 +93,8 @@ class pix2pixHDModel:
             self.dnet_t.load_state_dict(dt_dict)
             dp_dict = torch.load(os.path.join(self.load_dir, 'dnet_p.pth'))
             self.dnet_p.load_state_dict(dp_dict)
+            dk_dict = torch.load(os.path.join(self.load_dir, 'dnet_k.pth'))
+            self.dnet_k.load_state_dict(dk_dict)
 
     def train(self):
         print(f'Use device: {self.device}'
@@ -99,11 +105,13 @@ class pix2pixHDModel:
         self.pix2pix.to(device=self.device)
         self.dnet_t.to(device=self.device)
         self.dnet_p.to(device=self.device)
+        self.dnet_k.to(device=self.device)
 
 
-        self.optimizer_G = torch.optim.Adam(self.pix2pix.parameters(), lr=self.lr, betas=(0.5, 0.999))
-        self.optimizer_DT = torch.optim.Adam(self.dnet_t.parameters(), lr=self.lr, betas=(0.5, 0.999))
-        self.optimizer_DP = torch.optim.Adam(self.dnet_p.parameters(), lr=self.lr, betas=(0.5, 0.999))
+        self.optimizer_G = torch.optim.Adam(self.pix2pix.parameters(), lr=self.lr, betas=(0.5, 0.99))
+        self.optimizer_DT = torch.optim.Adam(self.dnet_t.parameters(), lr=self.lr, betas=(0.5, 0.99))
+        self.optimizer_DP = torch.optim.Adam(self.dnet_p.parameters(), lr=self.lr, betas=(0.5, 0.99))
+        self.optimizer_DK = torch.optim.Adam(self.dnet_k.parameters(), lr=self.lr, betas=(0.5, 0.99))
 
         for epoch in range(self.epochs):
             err_g_list = []
@@ -112,8 +120,10 @@ class pix2pixHDModel:
             loss_sty_list = []
             lg_t_list = []
             lg_p_list = []
+            lg_k_list = []
             loss_dt_list = []
             loss_dp_list = []
+            loss_dk_list = []
 
 
             for idx, data_batch in enumerate(self.trainloader):
@@ -134,7 +144,7 @@ class pix2pixHDModel:
                 # self.smap = smap.type(torch.FloatTensor).to(self.device)
                 # self.t_map = t_map.type(torch.FloatTensor).to(self.device)
 
-                err_g, err_dt, err_dp, loss_l1, loss_p, loss_style, l_gan_t, l_gan_p = self.one_step()
+                err_g, err_dt, err_dp, err_dk, loss_l1, loss_p, loss_style, l_gan_t, l_gan_p, l_gan_k = self.one_step()
 
                 err_g_list.append(err_g.item())
                 loss_l1_list.append(loss_l1.item())
@@ -142,15 +152,18 @@ class pix2pixHDModel:
                 loss_sty_list.append(loss_style.item())
                 lg_t_list.append(l_gan_t.item())
                 lg_p_list.append(l_gan_p.item())
+                lg_k_list.append(l_gan_k.item())
                 loss_dt_list.append(err_dt.item())
                 loss_dp_list.append(err_dp.item())
+                loss_dk_list.append(err_dk.item())
 
                 if idx % self.show_per_epoch == 0:
                     print('Epoch: {}, Iter: {}, gloss: {:.5f}, l1: {:.5f}, '
-                          'lp: {:.5f}, l_style: {:.5f}, lg_t: {:.5f}, lg_p: {:.5f}, ld_t: {:.5f}, ld_p: {:.5f}'.format(
+                          'lp: {:.5f}, l_style: {:.5f}, lg_t: {:.5f}, lg_p: {:.5f}, lg_k: {:.5f}, '
+                          'ld_t: {:.5f}, ld_p: {:.5f}, ld_k: {:.5f}'.format(
                            epoch, idx, np.mean(err_g_list), np.mean(loss_l1_list),np.mean(loss_p_list), 
-                           np.mean(loss_sty_list), np.mean(lg_t_list), np.mean(lg_p_list), 
-                           np.mean(loss_dt_list), np.mean(loss_dp_list)))
+                           np.mean(loss_sty_list), np.mean(lg_t_list), np.mean(lg_p_list), np.mean(lg_k_list), 
+                           np.mean(loss_dt_list), np.mean(loss_dp_list), np.mean(loss_dk_list)))
 
                     err_g_list.clear()
                     loss_l1_list.clear()
@@ -158,8 +171,10 @@ class pix2pixHDModel:
                     loss_sty_list.clear()
                     lg_t_list.clear()
                     lg_p_list.clear()
+                    lg_k_list.clear()
                     loss_dt_list.clear()
                     loss_dp_list.clear()
+                    loss_dk_list.clear()
 
                 if idx % self.test_per_epoch == 0:
                     self.test(epoch, idx)
@@ -187,12 +202,24 @@ class pix2pixHDModel:
 
         err_dp = (real_loss_dp + fake_loss_dp) * 0.5
 
+        # dicscriminator_k forward
+        real_score_dk = self.dnet_k(torch.cat((self.target, self.target), dim=1))
+        real_loss_dk = self.criterionGAN(real_score_dk, True)
+
+        fake_score_dk = self.dnet_k(torch.cat((self.fake.detach(), self.target), dim=1))
+        fake_loss_dk = self.criterionGAN(fake_score_dk, False)
+
+        err_dk = (real_loss_dk+ fake_loss_dk) * 0.5
+
         # generator forward
         fake_score_gt = self.dnet_t(torch.cat((self.fake, self.t_pose), dim=1))
-        l_gan_t = self.criterionGAN(fake_score_gt, True)
+        l_gan_t = self.criterionGAN(fake_score_gt, True, for_discriminator=False)
 
         fake_score_gp = self.dnet_p(torch.cat((self.fake, self.img), dim=1))
-        l_gan_p = self.criterionGAN(fake_score_gp, True)
+        l_gan_p = self.criterionGAN(fake_score_gp, True, for_discriminator=False)
+
+        fake_score_gk = self.dnet_k(torch.cat((self.fake, self.target), dim=1))
+        l_gan_k = self.criterionGAN(fake_score_gk, True, for_discriminator=False)
 
         # l_fm = 0
         # for i in range(len(real_inter_d)):
@@ -200,12 +227,7 @@ class pix2pixHDModel:
         #         l_fm += self.criterionFM(real_inter_d[i][j].detach(), fake_inter_g[i][j])
 
         loss_l1, loss_p, loss_style = self.criterionPerPixel(self.fake, self.target)
-        err_g = 1 * loss_l1 + 2 * loss_p + 0 * loss_style + 0.5 * l_gan_t + 0.5 * l_gan_p
-
-        # optimize genrator
-        self.pix2pix.zero_grad()
-        err_g.backward()
-        self.optimizer_G.step()
+        err_g = 10 * loss_l1 + 5 * loss_p  + 0 * loss_style + 1 * l_gan_t + 1 * l_gan_p + 1 * l_gan_k
 
         # optimize discriminator_t
         self.dnet_t.zero_grad()
@@ -217,7 +239,17 @@ class pix2pixHDModel:
         err_dp.backward()
         self.optimizer_DP.step()
 
-        return err_g, err_dt, err_dp, loss_l1, loss_p, loss_style, l_gan_t, l_gan_p
+        # optimize discriminator_p
+        self.dnet_k.zero_grad()
+        err_dk.backward()
+        self.optimizer_DK.step()
+
+        # optimize discriminator_k
+        self.pix2pix.zero_grad()
+        err_g.backward()
+        self.optimizer_G.step()
+
+        return err_g, err_dt, err_dp, err_dk, loss_l1, loss_p, loss_style, l_gan_t, l_gan_p, l_gan_k
 
     def test(self, epoch=0, step=0, save_pic=True):
         # load test sample from testloader
@@ -239,12 +271,13 @@ class pix2pixHDModel:
             source = (test_batch['input']['image']).detach().cpu()
             poses = (test_batch['input']['t_pose']).detach().cpu()
             poses = denormalize(poses)
-            poses = torch.unsqueeze(torch.sum(poses, dim=1), dim=1)
+            poses = torch.max(poses, 1).values
+            poses = torch.unsqueeze(poses, dim=1)
             target_ = (test_batch['input']['target']).detach().cpu()
 
             fake_ = self.pix2pix(test_img, test_pose, test_style)
             fake_ = fake_.detach().cpu()
-        
+
         fake_ = denormalize(fake_)
         target_ = denormalize(target_)
         source = denormalize(source)
