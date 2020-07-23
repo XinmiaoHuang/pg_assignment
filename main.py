@@ -19,7 +19,7 @@ def train(opt):
     model.init()
 
     if opt.checkpoint is not None:
-        model.load_model(load_g=True, load_d=True)
+        # model.load_model(load_g=True, load_d=True)
         print(f'Checkpoint loaded from {opt.checkpoint}')
     model.train()
 

@@ -174,7 +174,7 @@ class pix2pix(nn.Module):
 
         resnet = []
         n_blocks = 6
-        for i in range(n_blocks):
+        for _ in range(n_blocks):
             resnet += [ResBlock(n_mult * ngf)]
         self.resnet = nn.Sequential(*resnet)
 
@@ -183,7 +183,7 @@ class pix2pix(nn.Module):
                    norm_layer(ngf * 8),
                    nn.ReLU(True)]
         n_mult = 8
-        for i in range(n_layer):
+        for _ in range(n_layer):
             decoder += [nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True),
                         nn.Conv2d(ngf * n_mult, ngf * (n_mult // 2), 3, 1, 1, bias=False),
                         norm_layer(ngf * (n_mult // 2)),
@@ -194,9 +194,9 @@ class pix2pix(nn.Module):
                     nn.Tanh()]
         self.decoder = nn.Sequential(*decoder)
 
-    def forward(self, img, pose):
-        # x = torch.cat((img, pose), dim=1)
-        x = self.encoder(pose)
+    def forward(self, img, pose, style):
+        x = torch.cat((img, pose), dim=1)
+        x = self.encoder(x)
         x = self.resnet(x)
         out = self.decoder(x)
         return out
