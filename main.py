@@ -11,7 +11,7 @@ def train(opt):
     deepfashionTrainLoader = DataLoader(deepfashion, batch_size=opt.train_bsize,
                                 shuffle=True, drop_last=True)
     # load testset
-    deepfashion_test = DeepfashionPoseDataset(opt.img_size, opt.base_dir, opt.index_dir, opt.map_dir, training=True)
+    deepfashion_test = DeepfashionPoseDataset(opt.img_size, opt.base_dir, opt.index_dir, opt.map_dir, training=False)
     deepfashionTestLoader = DataLoader(deepfashion_test, batch_size=opt.test_bsize,
                                 shuffle=True, drop_last=True)
     # initialize
@@ -19,7 +19,7 @@ def train(opt):
     model.init()
 
     if opt.checkpoint is not None:
-        # model.load_model(load_g=True, load_d=True)
+        model.load_model(load_g=True, load_d=True)
         print(f'Checkpoint loaded from {opt.checkpoint}')
     model.train()
 
